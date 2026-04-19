@@ -29,16 +29,13 @@ function curl.setup(opts)
   end
 
   if not H.query_autocmd_set then
-    vim.api.nvim_create_autocmd(
-      { "BufReadPost", "BufNewFile", "BufEnter", "BufWinEnter", "BufFilePost" },
-      {
-        group = vim.api.nvim_create_augroup("curl_nvim_query_files", { clear = true }),
-        pattern = "*.curl",
-        callback = function(args)
-          H.attach_curl_buffer(args.buf)
-        end,
-      }
-    )
+    vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufEnter", "BufWinEnter", "BufFilePost" }, {
+      group = vim.api.nvim_create_augroup("curl_nvim_query_files", { clear = true }),
+      pattern = "*.curl",
+      callback = function(args)
+        H.attach_curl_buffer(args.buf)
+      end,
+    })
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       H.attach_curl_buffer(buf)
     end
@@ -113,7 +110,7 @@ function H.is_query_start(line)
   return line:match "^%s*curl%s" or line:match "^%s*curl$" or line:match "^%s*https?://"
 end
 
-local function save_query_buffer(buf, file)
+function H.save_query_buffer(buf, file)
   if not H.is_valid_buf(buf) then return end
   file = file or vim.api.nvim_buf_get_name(buf)
   if not H.is_curl_file(file) then return end
@@ -173,7 +170,7 @@ function H.get_query_buffer()
       group = vim.api.nvim_create_augroup("curl_nvim_cache_" .. buf, { clear = true }),
       buffer = buf,
       callback = function()
-        save_query_buffer(buf, file)
+        H.save_query_buffer(buf, file)
       end,
     })
   end
@@ -326,7 +323,9 @@ end
 
 function H.write_formatted_output(output)
   if output == "" or vim.fn.executable "jq" ~= 1 then
-    vim.schedule(function() H.write_output(output, false) end)
+    vim.schedule(function()
+      H.write_output(output, false)
+    end)
     return
   end
 
@@ -339,7 +338,9 @@ function H.write_formatted_output(output)
     end
   end
   if not json_index then
-    vim.schedule(function() H.write_output(output, false) end)
+    vim.schedule(function()
+      H.write_output(output, false)
+    end)
     return
   end
 
@@ -353,10 +354,11 @@ function H.write_formatted_output(output)
     local text, is_json = output, false
     if result.code == 0 and result.stdout and result.stdout ~= "" then
       is_json = true
-      text = #headers > 0 and (table.concat(headers, "\n") .. "\n" .. result.stdout)
-          or result.stdout
+      text = #headers > 0 and (table.concat(headers, "\n") .. "\n" .. result.stdout) or result.stdout
     end
-    vim.schedule(function() H.write_output(text, is_json) end)
+    vim.schedule(function()
+      H.write_output(text, is_json)
+    end)
   end)
 end
 
