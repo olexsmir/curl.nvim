@@ -1,4 +1,4 @@
-local function check_binary(bin, msg, optional)
+local function check(bin, msg, optional)
   if vim.fn.executable(bin) == 1 then
     vim.health.ok(bin .. " found on PATH: `" .. vim.fn.exepath(bin) .. "`")
     return
@@ -21,9 +21,9 @@ return {
     end
 
     vim.health.start "Required dependencies"
-    check_binary("curl", "required to run requests", false)
+    check("curl", "required to run requests", false)
 
     vim.health.start "Optional dependencies"
-    check_binary("jq", "used for JSON formatting in output buffers", true)
+    check("jq", "used for JSON formatting in output buffers", true)
   end,
 }
