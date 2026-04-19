@@ -326,9 +326,7 @@ end
 
 function H.write_formatted_output(output)
   if output == "" or vim.fn.executable "jq" ~= 1 then
-    vim.schedule(function()
-      H.write_output(output, false)
-    end)
+    vim.schedule(function() H.write_output(output, false) end)
     return
   end
 
@@ -341,9 +339,7 @@ function H.write_formatted_output(output)
     end
   end
   if not json_index then
-    vim.schedule(function()
-      H.write_output(output, false)
-    end)
+    vim.schedule(function() H.write_output(output, false) end)
     return
   end
 
@@ -358,11 +354,9 @@ function H.write_formatted_output(output)
     if result.code == 0 and result.stdout and result.stdout ~= "" then
       is_json = true
       text = #headers > 0 and (table.concat(headers, "\n") .. "\n" .. result.stdout)
-        or result.stdout
+          or result.stdout
     end
-    vim.schedule(function()
-      H.write_output(text, is_json)
-    end)
+    vim.schedule(function() H.write_output(text, is_json) end)
   end)
 end
 

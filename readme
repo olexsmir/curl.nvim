@@ -1,0 +1,27 @@
+curl.nvim
+---------
+
+simple curl integration to neovim
+
+
+INSTILL
+
+    vim.pack.add { "https://github.com/olexsmir/curl.nvim" }
+    require("curl").setup {}
+
+CONFIGURATION
+
+    require("curl").setup {
+      curl = nil, -- path to binary, leave nil to use one in $PATH
+      default_flags = { "-i" }, -- by default {}
+      open_cmd = "vsplit",
+      map_execute = "<CR>",
+    }
+
+LICENSE
+
+  "THE BEERWARE LICENSE" (Revision 42):
+  Oleksandr Smirnov wrote this code. As long as you retain this
+  notice, you can do whatever you want with this stuff. If we
+  meet someday, and you think this stuff is worth it, you can
+  buy me a beer in return.
