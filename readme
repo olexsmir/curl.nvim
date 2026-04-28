@@ -13,7 +13,7 @@ CONFIGURATION
 
     require("curl").setup {
       curl = nil, -- path to binary, leave nil to use one in $PATH
-      default_flags = { "-i" }, -- by default {}
+      default_flags = { "-i" },
       open_cmd = "vsplit",
       map_execute = "<CR>",
     }
