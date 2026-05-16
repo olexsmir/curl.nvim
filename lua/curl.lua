@@ -32,6 +32,13 @@ function curl.setup(opts)
       pattern = "*.curl",
       callback = function(args) H.attach_curl_buffer(args.buf) end,
     })
+    vim.api.nvim_create_autocmd("BufDelete", {
+      group = vim.api.nvim_create_augroup("curl_nvim_cache_cleanup", { clear = true }),
+      pattern = "*.curl",
+      callback = function(args)
+        H.query_buffers[vim.api.nvim_buf_get_name(args.buf)] = nil
+      end,
+    })
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       H.attach_curl_buffer(buf)
     end
@@ -79,7 +86,7 @@ function curl.execute()
     H.running_request = nil
   end
 
-  H.running_request = vim.system(command, { text = true }, function(result)
+  H.running_request = vim.system({ vim.o.shell, "-c", command }, { text = true }, function(result)
     H.running_request = nil
     local output = result.stdout or ""
     if result.stderr and result.stderr ~= "" then
@@ -102,7 +109,11 @@ end
 function H.save_query_buffer(buf, file)
   if not H.is_valid_buf(buf) then return end
   file = file or vim.api.nvim_buf_get_name(buf)
-  if not H.is_curl_file(file) then return end
+  if not file or file == "" then return end
+  if not H.is_curl_file(file) then
+    vim.notify("[curl.nvim] cannot save: buffer is not a .curl file", vim.log.levels.WARN)
+    return
+  end
 
   local ok = pcall(vim.fn.writefile, vim.api.nvim_buf_get_lines(buf, 0, -1, false), file, "b")
   if ok then
@@ -118,10 +129,7 @@ function H.query_cache_file()
     return nil
   end
 
-  local cwd = vim.fn.getcwd()
-  local base = vim.fn.fnamemodify(cwd, ":t")
-  if base == "" then base = "root" end
-  return vim.fs.joinpath(H.cache_dir, base .. "_" .. vim.fn.sha256(cwd):sub(1, 8) .. ".curl")
+  return vim.fs.joinpath(H.cache_dir, vim.fn.sha256(vim.fn.getcwd()) .. ".curl")
 end
 
 function H.attach_curl_buffer(buf)
@@ -215,13 +223,12 @@ function H.find_query_block(lines, cursor_line)
       start_line = i
       break
     end
-    if vim.trim(lines[i]) == "" then break end
   end
   if not start_line then return nil end
 
   local end_line = #lines
   for i = start_line + 1, #lines do
-    if H.is_query_start(lines[i]) or vim.trim(lines[i]) == "" then
+    if H.is_query_start(lines[i]) then
       end_line = i - 1
       break
     end
@@ -231,67 +238,61 @@ function H.find_query_block(lines, cursor_line)
   return start_line, end_line
 end
 
-function H.shell_split(input)
-  local args, current, quote = {}, {}, nil
-  local i = 1
-  while i <= #input do
-    local ch = input:sub(i, i)
-    if quote == "'" then
-      if ch == "'" then
-        quote = nil
-      else
-        table.insert(current, ch)
-      end
-    elseif quote == '"' then
-      if ch == '"' then
-        quote = nil
-      elseif ch == "\\" and i < #input then
-        i = i + 1
-        table.insert(current, input:sub(i, i))
-      else
-        table.insert(current, ch)
-      end
-    else
-      if ch == "'" or ch == '"' then
-        quote = ch
-      elseif ch:match "%s" then
-        if #current > 0 then
-          table.insert(args, table.concat(current))
-          current = {}
+function H.quote_json_bodies(lines)
+  local result = {}
+  local json_open
+  local stack_depth = 0
+  local in_json = false
+  for _, line in ipairs(lines) do
+    local s = line
+    local trimmed = vim.trim(s)
+
+    if not in_json and trimmed:match("^[%[%{]") then
+      json_open = trimmed:sub(1, 1)
+      in_json = true
+      s = "'" .. s
+    end
+
+    if in_json then
+      for ch in s:gmatch(".") do
+        if ch == json_open then
+          stack_depth = stack_depth + 1
+        elseif (json_open == "{" and ch == "}") or (json_open == "[" and ch == "]") then
+          stack_depth = stack_depth - 1
+          if stack_depth == 0 then
+            s = s .. "'"
+            in_json = false
+            break
+          end
         end
-      elseif ch == "\\" and i < #input then
-        i = i + 1
-        table.insert(current, input:sub(i, i))
-      else
-        table.insert(current, ch)
       end
     end
-    i = i + 1
-  end
 
-  if quote then return nil, "unterminated quote in query" end
-  if #current > 0 then table.insert(args, table.concat(current)) end
-  return args
+    table.insert(result, s)
+  end
+  return result
 end
 
 function H.build_command(query_lines)
-  local body_parts = {}
-  for _, line in ipairs(query_lines) do
+  local parts = {}
+  for _, line in ipairs(H.quote_json_bodies(query_lines)) do
     local s = vim.trim(line)
-    if s ~= "" and not s:match "^#" then table.insert(body_parts, (s:gsub("\\%s*$", ""))) end
+    if s ~= "" and not s:match("^#") then
+      table.insert(parts, (s:gsub("\\%s*$", "")))
+    end
   end
 
-  local body = vim.trim(table.concat(body_parts, " "))
+  local body = vim.trim(table.concat(parts, " "))
   if body == "" then return nil, "empty query" end
 
-  local parsed, err = H.shell_split(body)
-  if not parsed or #parsed == 0 then return nil, err end
-  if parsed[1] == "curl" then table.remove(parsed, 1) end
+  body = body:gsub("^curl%s+", "", 1)
 
-  local cmd = { curl.config.curl or "curl", "--silent", "--show-error" }
-  vim.list_extend(cmd, curl.config.default_flags or {})
-  vim.list_extend(cmd, parsed)
-  return cmd
+  local flag_parts = {}
+  for _, f in ipairs(curl.config.default_flags or {}) do
+    table.insert(flag_parts, f)
+  end
+
+  return (curl.config.curl or "curl") .. " " .. table.concat(flag_parts, " ") .. " -sSL " .. body
 end
 
 function H.write_output(query_buf, text)
@@ -330,13 +331,16 @@ function H.write_formatted_output(query_buf, output)
 
   local headers = {}
   for i = 1, json_index - 1 do
-    table.insert(headers, vim.trim(lines[i]))
+    local trimmed = vim.trim(lines[i])
+    if trimmed ~= "" then
+      table.insert(headers, trimmed)
+    end
   end
   local json_body = table.concat(vim.list_slice(lines, json_index, #lines), "\n")
 
   vim.system({ "jq", "." }, { text = true, stdin = json_body }, function(result)
     if result.code == 0 and result.stdout and result.stdout ~= "" then
-      output = #headers > 0 and (table.concat(headers, "\n") .. "\n" .. result.stdout) or result.stdout
+      output = #headers > 0 and (table.concat(headers, "\n") .. "\n\n" .. result.stdout) or result.stdout
     end
     vim.schedule(function() H.write_output(query_buf, output) end)
   end)
