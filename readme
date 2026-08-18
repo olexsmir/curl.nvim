@@ -1,22 +1,30 @@
 curl.nvim
 ---------
 
-simple curl integration to neovim. btw this is ai slop.
-
+curl scratch buffer for nvim.
 
 INSTILL
 
-    vim.pack.add { "https://github.com/olexsmir/curl.nvim" }
-    require("curl").setup {}
+  vim.pack.add { "https://github.com/olexsmir/curl.nvim" }
 
 CONFIGURATION
 
-    require("curl").setup {
-      curl = nil, -- path to binary, leave nil to use one in $PATH
-      default_flags = { "-i" },
-      open_cmd = "vsplit",
-      map_execute = "<CR>",
-    }
+  ---@type curl.Config
+  vim.g.curl_config = {
+    curl_bin = "curl",   -- curl command
+    flags = { "-i" },    -- list of default curl flags
+    execute_map = "<cr>" -- keymap used to execute curl command under cursor
+  }
+
+USAGE
+
+  # open .curl file
+  :e test.curl
+
+  # write some curl command like,
+  curl http://localhost:3000/api/ping
+  # press <cr> (or your execute_map) on the line with curl command
+
 
 LICENSE
 
